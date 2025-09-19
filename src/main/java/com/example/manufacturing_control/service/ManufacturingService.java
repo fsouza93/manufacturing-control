@@ -176,40 +176,88 @@ public class ManufacturingService {
     }
 
     // Johnson para 2 máquinas: M1 = Fabricação, M2 = Montagem 1
-    // Empates ajustados para casar com seu exemplo prático:
-    private List<Product> applyJohnsonRuleFabVsM1(List<Product> products) {
-        List<Product> rem = new ArrayList<>(products);
-        Product[] res = new Product[products.size()];
-        int L = 0, R = res.length - 1;
+// Regras:
+// - Menor global na PRIMEIRA coluna (Fabricação): disputam INÍCIO;
+//   desempate por Montagem ASC; "menor conjunto" fica na ÚLTIMA posição do bloco à esquerda.
+// - Menor global na ÚLTIMA coluna (Montagem 1): disputam FIM;
+//   desempate por Fabricação ASC; "menor conjunto" fica na PRIMEIRA posição do bloco à direita.
+private List<Product> applyJohnsonRuleFabVsM1(List<Product> products) {
+    List<Product> remaining = new ArrayList<>(products);
+    Product[] result = new Product[products.size()];
 
-        while (!rem.isEmpty()) {
-            int min = Integer.MAX_VALUE;
-            for (Product p : rem) {
-                min = Math.min(min, Math.min(p.getFabricationTime(), p.getAssemblyTimes().get(0)));
-            }
-            List<Product> minOnM1 = new ArrayList<>();
-            List<Product> minOnM2 = new ArrayList<>();
-            for (Product p : rem) {
-                if (p.getFabricationTime() == min) minOnM1.add(p);
-                else if (p.getAssemblyTimes().get(0) == min) minOnM2.add(p);
-            }
+    int leftPos = 1;                  // próxima posição livre à esquerda (1-based)
+    int rightPos = products.size();   // próxima posição livre à direita (1-based)
 
-            if (!minOnM1.isEmpty()) {
-                // desempate: maior M2 primeiro
-                minOnM1.sort((a,b) -> Integer.compare(b.getAssemblyTimes().get(0), a.getAssemblyTimes().get(0)));
-                Product chosen = minOnM1.get(0);
-                res[L++] = chosen;
-                rem.remove(chosen);
-            } else {
-                // mínimo na M2: desempate por menor M1 primeiro
-                minOnM2.sort(Comparator.comparingInt(Product::getFabricationTime));
-                Product chosen = minOnM2.get(0);
-                res[R--] = chosen;
-                rem.remove(chosen);
-            }
+    while (!remaining.isEmpty()) {
+
+        // 1) menor valor global entre FAB e MONT1
+        int globalMin = Integer.MAX_VALUE;
+        for (Product p : remaining) {
+            int fab = p.getFabricationTime();
+            int asm = p.getAssemblyTimes().get(0);
+            if (fab < globalMin) globalMin = fab;
+            if (asm < globalMin) globalMin = asm;
         }
-        return Arrays.asList(res);
+
+        // 2) separar candidatos pela coluna do menor
+        List<Product> firstCol = new ArrayList<>(); // FAB
+        List<Product> lastCol  = new ArrayList<>(); // MONT1
+        for (Product p : remaining) {
+            int fab = p.getFabricationTime();
+            int asm = p.getAssemblyTimes().get(0);
+            boolean minInFirst = (fab == globalMin);
+            boolean minInLast  = (asm == globalMin);
+
+            if (minInFirst) firstCol.add(p);
+            // se aparecer nas duas, prevalece PRIMEIRA (não entra na última)
+            if (minInLast && !minInFirst) lastCol.add(p);
+        }
+
+        // 3) PRIMEIRA coluna → disputam INÍCIO
+        if (!firstCol.isEmpty()) {
+            // desempate: Montagem ASC; estável por nome
+            firstCol.sort((a, b) -> {
+                int c = Integer.compare(a.getAssemblyTimes().get(0), b.getAssemblyTimes().get(0));
+                if (c != 0) return c;
+                return a.getName().compareTo(b.getName());
+            });
+
+            // regra: "menor conjunto" fica na ÚLTIMA posição do bloco à esquerda
+            int k = firstCol.size();
+            for (int i = k - 1; i >= 0; i--) {
+                Product p = firstCol.get(i);
+                int pos = leftPos + (k - 1 - i);  // mapeia em ordem inversa
+                result[pos - 1] = p;
+                remaining.remove(p);
+            }
+            leftPos += k;
+        }
+
+        // 4) ÚLTIMA coluna → disputam FIM
+        if (!lastCol.isEmpty()) {
+            // desempate: Fabricação ASC; estável por nome
+            lastCol.sort((a, b) -> {
+                int c = Integer.compare(a.getFabricationTime(), b.getFabricationTime());
+                if (c != 0) return c;
+                return a.getName().compareTo(b.getName());
+            });
+
+            // regra: "menor conjunto" fica na PRIMEIRA posição do bloco à direita
+            int k = lastCol.size();
+            int start = rightPos - k + 1; // menor posição final em disputa
+            for (int i = 0; i < k; i++) {
+                Product p = lastCol.get(i);
+                int pos = start + i;       // do menor para o maior (mais à esquerda do bloco final)
+                result[pos - 1] = p;
+                remaining.remove(p);
+            }
+            rightPos -= k;
+        }
     }
+
+    return Arrays.asList(result);
+}
+
 
     private ProductionResult.ProductionStep findStep(List<ProductionResult.ProductionStep> steps,
                                                      String product, String stage) {
