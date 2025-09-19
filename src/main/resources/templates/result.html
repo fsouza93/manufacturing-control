@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resultado da Produção - Linha de Montagem</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    body{
+      background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+      min-height:100vh; padding:20px 0;
+    }
+    .card{
+      backdrop-filter:blur(10px);
+      background:rgba(255, 255, 255, 0.959);
+      border:none; border-radius:20px;
+      box-shadow:0 20px 40px rgba(0,0,0,.1);
+      margin-bottom:20px;
+    }
+
+    /* ====== CARDS (Resumo) ====== */
+    .production-summary{
+      background:linear-gradient(45deg,#ffc107,#fd7e14);
+      color:#fff; border-radius:20px; padding:24px; margin-bottom:30px;
+    }
+    .summary-grid{
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:18px; margin-top:12px;
+    }
+    .summary-card{
+      background:rgba(255,255,255,.22);
+      padding:16px; border-radius:16px; text-align:center;
+    }
+    .summary-card h4{ font-size:28px; margin:6px 0 0 0; }
+    .summary-card h5{ margin:0; font-weight:600; }
+
+    /* ====== TABELAS ====== */
+    .excel-table{
+      border:2px solid #333; border-collapse:collapse; background:#fff;
+      font-family:Arial, sans-serif; margin:20px auto; width:100%;
+      border-radius:12px; overflow:hidden;   /* garante cantos arredondados */
+    }
+    .excel-table th,.excel-table td{
+      border:1px solid #333; padding:6px 8px;
+      text-align:center; font-size:14px; font-weight:bold;
+    }
+    .excel-header{
+      background:linear-gradient(45deg,#4CAF50,#2e9f3e);
+      color:#fff; font-weight:bold; text-align:center; font-size:16px;
+    }
+    .excel-subheader{ background:#e8f5e8; font-weight:700; }
+    .product-cell{ background:#fff2e6; }
+    .time-cell{ background:#e6f3ff; }
+
+    /* topo seção */
+    .section-title{ margin:10px 0 0; }
+  </style>
+
+  <!-- ExcelJS + FileSaver para exportar com cores -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="row justify-content-between align-items-center mb-2">
+    <div class="col">
+      <h2 class="text-white-50 fw-bold">Resultado da Programação de Produção</h2>
+      
+    </div>
+    <div class="col-auto d-flex gap-2">
+      <a href="/" class="btn btn-outline-light">Nova Simulação</a>
+      <button id="btnExport" class="btn btn-success">Exportar Excel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body p-4">
+
+      <!-- ===== Resumo (cards) ===== -->
+      <div class="production-summary"
+           th:with="
+             fabTotal=${result.fabricationTime},
+             m1Acc=${#lists.isEmpty(result.assembly1CumulativeTimes) ? 0 : result.assembly1CumulativeTimes.get(result.assembly1CumulativeTimes.size()-1)},
+             m2Acc=${#lists.isEmpty(result.assembly2CumulativeTimes) ? 0 : result.assembly2CumulativeTimes.get(result.assembly2CumulativeTimes.size()-1)},
+             idleTotal=${result.idleTime}
+           ">
+        <div class="summary-grid">
+          <div class="summary-card">
+            <h5>Tempo Total Fabricação</h5>
+            <h4 th:text="${fabTotal} + ' min'">--</h4>
+          </div>
+          <div class="summary-card">
+            <h5>Tempo Total Montagem 1</h5>
+            <h4 th:text="${m1Acc} + ' min'">--</h4>
+          </div>
+          <div class="summary-card" th:if="${result.numberOfAssemblyStages == 2}">
+            <h5>Tempo Total Montagem 2</h5>
+            <h4 th:text="${m2Acc} + ' min'">--</h4>
+          </div>
+          <div class="summary-card">
+            <h5>Tempo Ocioso (Montagens)</h5>
+            <h4 th:text="${idleTotal} + ' min'">--</h4>
+            <small th:text="'M1: ' + ${result.idleM1} + ' • M2: ' + ${result.idleM2}"></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== FABRICAÇÃO ===== -->
+      <table class="excel-table" id="tblFab"
+             th:with="fabSteps=${result.productionSteps.?[stage == 'Fabricação']}">
+        <thead>
+        <tr>
+          <th class="excel-header" th:attr="colspan=${result.productionOrder.size() + 1}">FABRICAÇÃO</th>
+        </tr>
+        <tr class="excel-subheader">
+          <td>POSIÇÃO</td>
+          <td th:each="i : ${#numbers.sequence(1, result.productionOrder.size())}" th:text="${i} + '°'">1°</td>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+          <td class="excel-subheader">PRODUTO</td>
+          <td class="product-cell"
+              th:each="p, iStat : ${result.productionOrder}"
+              th:with="st=${fabSteps[iStat.index]}">
+            <span th:text="${p + ' (' + st.duration + ')'}">Produto (t)</span>
+          </td>
+        </tr>
+        <tr>
+          <td class="excel-subheader">TEMPO</td>
+          <td class="time-cell" th:each="t : ${result.fabricationCumulativeTimes}" th:text="${t}">0</td>
+        </tr>
+        </tbody>
+      </table>
+
+      <!-- ===== MONTAGEM 1 (com OC) ===== -->
+      <table class="excel-table" id="tblM1"
+             th:with="lab=${result.assembly1DisplayLabels},
+                      cum=${result.assembly1DisplayCumTimes},
+                      q=${#lists.size(lab)}">
+        <thead>
+        <tr>
+          <th class="excel-header" th:attr="colspan=${q + 1}">MONTAGEM 1</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+          <td class="excel-subheader">PRODUTO</td>
+          <td class="product-cell" th:each="label : ${lab}" th:text="${label}">Produto (t)</td>
+        </tr>
+        <tr>
+          <td class="excel-subheader">TEMPO</td>
+          <td class="time-cell" th:each="t : ${cum}" th:text="${t}">0</td>
+        </tr>
+        </tbody>
+      </table>
+
+      <!-- ===== MONTAGEM 2 (com OC; opcional) ===== -->
+      <table class="excel-table" id="tblM2"
+             th:if="${result.numberOfAssemblyStages == 2 and result.assembly2DisplayLabels != null and !result.assembly2DisplayLabels.isEmpty()}"
+             th:with="lab=${result.assembly2DisplayLabels},
+                      cum=${result.assembly2DisplayCumTimes},
+                      q=${#lists.size(lab)}">
+        <thead>
+        <tr>
+          <th class="excel-header" th:attr="colspan=${q + 1}">MONTAGEM 2</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+          <td class="excel-subheader">PRODUTO</td>
+          <td class="product-cell" th:each="label : ${lab}" th:text="${label}">Produto (t)</td>
+        </tr>
+        <tr>
+          <td class="excel-subheader">TEMPO</td>
+          <td class="time-cell" th:each="t : ${cum}" th:text="${t}">0</td>
+        </tr>
+        </tbody>
+      </table>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Helpers para ler tabelas e exportar com estilos (ExcelJS) ===== */
+function readTable(tableEl){
+  const rows=[]; tableEl.querySelectorAll('tr').forEach(tr=>{
+    const r=[]; tr.querySelectorAll('th,td').forEach(td=>r.push(td.innerText.trim())); rows.push(r);
+  });
+  // detectar colunas OC na linha de PRODUTO
+  const ocCols=new Set(); let produtoRowIdx=-1;
+  for(let i=0;i<rows.length;i++){ if((rows[i][0]||'').toUpperCase().includes('PRODUTO')){produtoRowIdx=i;break;} }
+  if(produtoRowIdx>=0){
+    const prodRow=rows[produtoRowIdx];
+    for(let c=1;c<prodRow.length;c++){ if((prodRow[c]||'').toUpperCase().startsWith('OC')) ocCols.add(c); }
+  }
+  return {rows,ocCols};
+}
+function styleHeader(cell){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF4CAF50'}};
+  cell.font={color:{argb:'FFFFFFFF'},bold:true};
+  cell.alignment={horizontal:'center',vertical:'middle'};
+  cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+}
+function styleSubHeader(cell){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE8F5E8'}};
+  cell.font={bold:true}; cell.alignment={horizontal:'center',vertical:'middle'};
+  cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+}
+function styleProduct(cell){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF2E6'}};
+  cell.alignment={horizontal:'center'};
+  cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+}
+function styleTime(cell){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE6F3FF'}};
+  cell.alignment={horizontal:'center'};
+  cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+}
+function styleOC(cell){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFD54F'}}; // amarelo
+  cell.font={bold:true};
+  cell.alignment={horizontal:'center'};
+  cell.border={top:{style:'thin'},left:{style:'thin'},bottom:{style:'thin'},right:{style:'thin'}};
+}
+function writeTableToSheet(ws, tableEl){
+  const {rows,ocCols}=readTable(tableEl);
+  const colCount=Math.max(...rows.map(r=>r.length));
+  ws.columns=Array.from({length:colCount},()=>({width:14}));
+
+  // cabeçalho mesclado
+  ws.getCell(1,1).value=rows[0][0]||'';
+  ws.mergeCells(1,1,1,colCount);
+  styleHeader(ws.getCell(1,1));
+
+  let excelRow=2;
+  for(let r=1;r<rows.length;r++){
+    for(let c=0;c<colCount;c++){
+      const cell=ws.getCell(excelRow,c+1);
+      const val=rows[r][c]??'';
+      cell.value=val;
+
+      const firstCol=(rows[r][0]||'').toUpperCase();
+      const isProd=firstCol.includes('PRODUTO');
+      const isTempo=firstCol.includes('TEMPO');
+
+      if(r===1 && c===0){ styleSubHeader(cell); }
+      else if(isProd && c===0){ styleSubHeader(cell); }
+      else if(isTempo && c===0){ styleSubHeader(cell); }
+      else{
+        if(isProd){ if(ocCols.has(c)) styleOC(cell); else styleProduct(cell); }
+        else if(isTempo){ if(ocCols.has(c)) styleOC(cell); else styleTime(cell); }
+        else { styleSubHeader(cell); }
+      }
+    }
+    excelRow++;
+  }
+}
+
+document.getElementById('btnExport').addEventListener('click', async ()=>{
+  const wb=new ExcelJS.Workbook(); wb.created=new Date();
+  const fabTbl=document.getElementById('tblFab');
+  const m1Tbl=document.getElementById('tblM1');
+  const m2Tbl=document.getElementById('tblM2');
+  if(fabTbl) writeTableToSheet(wb.addWorksheet('Fabricacao'), fabTbl);
+  if(m1Tbl)  writeTableToSheet(wb.addWorksheet('Montagem1'), m1Tbl);
+  if(m2Tbl)  writeTableToSheet(wb.addWorksheet('Montagem2'), m2Tbl);
+  const buf=await wb.xlsx.writeBuffer();
+  saveAs(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'resultado_producao.xlsx');
+});
+</script>
+</body>
+</html>

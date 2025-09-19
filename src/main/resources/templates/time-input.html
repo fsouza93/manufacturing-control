@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuração de Tempos - Linha de Montagem</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px 0}
+    .card{backdrop-filter:blur(10px);background:rgba(255,255,255,.95);border:none;border-radius:20px;box-shadow:0 20px 40px rgba(0,0,0,.1)}
+    .table thead th{background:linear-gradient(45deg,#667eea,#764ba2);color:#fff;font-weight:600;border:none;padding:15px;vertical-align:middle}
+    .table tbody td{padding:12px 15px;vertical-align:middle}
+    .form-control{border-radius:8px;border:2px solid #e9ecef;text-align:center;font-weight:600;max-width:90px}
+    .btn-success{background:linear-gradient(45deg,#28a745,#20c997);border:none;border-radius:10px;padding:12px 40px;font-weight:600}
+    .helper{font-size:.9rem;color:#6c757d}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body p-4">
+          <div class="text-center mb-2">
+            <h2 class="text-dark">Configuração de Tempos de Produção</h2>
+            <p class="text-muted mb-2">Insira os tempos em minutos para cada etapa do processo</p>
+            <p class="helper">Dica: selecione a primeira célula e <strong>cole</strong> um bloco da planilha. O preenchimento vai linha a linha.</p>
+          </div>
+
+          <form th:action="@{/calculate}" th:object="${productionLine}" method="post" id="timeForm">
+            <input type="hidden" th:field="*{numberOfProducts}" />
+            <input type="hidden" th:field="*{numberOfAssemblyStages}" />
+
+            <div class="table-responsive">
+              <table class="table table-hover" id="timeTable">
+                <thead>
+                <tr>
+                  <th style="min-width:140px">Produto</th>
+                  <th>Fabricação (min)</th>
+                  <th th:each="j : ${#numbers.sequence(1, productionLine.numberOfAssemblyStages)}"
+                      th:text="${'Montagem ' + j + ' (min)'}">Montagem (min)</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:each="product, stat : ${productionLine.products}">
+                  <td>
+                    <strong th:text="${product.name}"></strong>
+                    <input type="hidden" th:field="*{products[__${stat.index}__].name}" />
+                  </td>
+
+                  <!-- Fabricação -->
+                  <td>
+                    <input type="number" class="form-control time-input"
+                           th:field="*{products[__${stat.index}__].fabricationTime}"
+                           min="1" max="999" required />
+                  </td>
+
+                  <!-- Montagens -->
+                  <td th:each="j : ${#numbers.sequence(0, productionLine.numberOfAssemblyStages - 1)}">
+                    <input type="number" class="form-control time-input"
+                           th:field="*{products[__${stat.index}__].assemblyTimes[__${j}__]}"
+                           th:attr="min=${j == 0} ? 1 : 0, max=999"
+                           required />
+                  </td>
+                </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="text-center mt-3">
+              <a href="/" class="btn btn-secondary me-3">Voltar</a>
+              <button type="submit" class="btn btn-success btn-lg">Calcular Produção</button>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==== COLAR EM MASSA ====
+// cola blocos do Excel/Sheets (TSV/CSV) no grid a partir do campo focado
+(function () {
+  const table = document.getElementById('timeTable');
+  table.addEventListener('paste', function (e) {
+    const target = e.target;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    if (!text) return;
+    e.preventDefault();
+
+    const rows = text.trim().split(/\r?\n/).map(line => line.split(/\t|;|,/));
+    const inputs = Array.from(table.querySelectorAll('tbody input.time-input'));
+    const startIndex = inputs.indexOf(target);
+    if (startIndex < 0) return;
+
+    let idx = startIndex;
+    for (const r of rows) {
+      for (const cell of r) {
+        if (idx >= inputs.length) break;
+        const v = cell.trim();
+        if (v !== '') inputs[idx].value = v;
+        idx++;
+      }
+      if (idx >= inputs.length) break;
+    }
+  }, true);
+})();
+</script>
+</body>
+</html>
