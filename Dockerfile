@@ -1,13 +1,21 @@
-# Use JRE 21 (compatível com Spring Boot 3)
-FROM eclipse-temurin:21-jre AS runtime
+# Etapa 1 - Build
+FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
 
-# Copia o JAR final (ajuste o nome do arquivo se quiser)
-COPY target/*.jar app.jar
+# Copia pom.xml e baixa dependências
+COPY pom.xml .
+RUN mvn dependency:go-offline
 
-# Memória enxuta p/ free tier
-ENV JAVA_OPTS="-Xms256m -Xmx512m"
+# Copia o código e compila
+COPY src ./src
+RUN mvn clean package -DskipTests
 
-# Render exporta a var PORT. O Spring respeita via --server.port=$PORT
-EXPOSE 8080
-CMD ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=${PORT:-8080}"]
+# Etapa 2 - Runtime
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+
+# Copia o jar compilado da etapa anterior
+COPY --from=build /app/target/*.jar app.jar
+
+# Expõe a porta do Render
+CMD ["java", "-jar", "app.jar", "--server.port=${PORT}"]
